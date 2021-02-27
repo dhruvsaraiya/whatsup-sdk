@@ -7,8 +7,6 @@ const whatupAxios = axios.create({
   },
 });
 
-window.topSecret = {};
-
 const setupAxiosDefaults = (token) => {
   whatupAxios.interceptors.request.use(function (config) {
     if (token) {
@@ -19,15 +17,17 @@ const setupAxiosDefaults = (token) => {
 };
 window.whatsupWidget = {
   load: async () => {
-    if (!(window.topSecret && window.topSecret.access_token)) {
+    var sessionAccessToken = window.sessionStorage.getItem(
+      "WhatsUpAccessToken"
+    );
+    var whatsAppLoginStatus = window.sessionStorage.getItem(
+      "WhatsAppLoginStatus"
+    );
+    if (!sessionAccessToken) {
       await window.whatsupWidget.login();
     }
-    if (
-      window.topSecret.access_token &&
-      window.topSecret.whatsapp_login_status !== "connected"
-    ) {
+    if (sessionAccessToken && whatsAppLoginStatus !== "connected") {
       displayQrCode();
-    } else {
     }
   },
   login: async () => {
@@ -45,9 +45,17 @@ window.whatsupWidget = {
       if (data.access_token) {
         setupAxiosDefaults(data.access_token);
       }
-      window.topSecret = {
-        ...data,
-      };
+      window.sessionStorage.setItem("WhatsUpName", data.name);
+      window.sessionStorage.setItem(
+        "WhatsUpContactNumber",
+        data.contact_number
+      );
+      window.sessionStorage.setItem("WhatsUpAccessToken", data.access_token);
+      window.sessionStorage.setItem("WhatsUpRefreshToken", data.refresh_token);
+      window.sessionStorage.setItem(
+        "WhatsAppLoginStatus",
+        data.whatsapp_login_status
+      );
     } else {
       // TODO: handle erros
     }
