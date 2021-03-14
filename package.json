@@ -20,7 +20,12 @@
     "whatsup-sdk"
   ],
   "author": "Dhruv Saraiya <dhruvsaraiya30@gmail.com> (https://dhruvsaraiya.github.io/)",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/dhruvsaraiya/whatsup-frontend/issues",
+    "email": "dhruvsaraiya30@gmail.com"
+  },
+  "repository": "https://github.com/dhruvsaraiya/whatsup-frontend",
   "dependencies": {
     "@babel/polyfill": "^7.12.1",
     "@babel/runtime": "^7.12.13",
