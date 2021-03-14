@@ -1,95 +1,26 @@
 import axios from "axios";
-const whatupAxios = axios.create({
-  baseURL: process.env.BASE_URL,
-  timeout: process.env.TIMEOUT,
+
+const whatsupAxios = axios.create({
+  baseURL: __whatsup.env.BASE_URL,
+  timeout: __whatsup.env.TIMEOUT,
   headers: {
     common: { "Content-Type": "application/json", Accept: "application/json" },
   },
 });
 
+const sessionStorage = window.sessionStorage;
 const setupAxiosDefaults = (token) => {
-  whatupAxios.interceptors.request.use(function (config) {
+  whatsupAxios.interceptors.request.use(function (config) {
     if (token) {
       config.headers.common["Authorization"] = `Bearer ${token}`;
     }
     return config;
   });
 };
-window.whatsupWidget = {
-  load: async () => {
-    var sessionAccessToken = window.sessionStorage.getItem(
-      "WhatsUpAccessToken"
-    );
-    var whatsAppLoginStatus = window.sessionStorage.getItem(
-      "WhatsAppLoginStatus"
-    );
-    if (!sessionAccessToken) {
-      await window.whatsupWidget.login();
-    }
-    if (sessionAccessToken && whatsAppLoginStatus !== "connected") {
-      displayQrCode();
-    }
-  },
-  login: async () => {
-    const { apiKey, contactNumber, name } =
-      window.whatsupConversationsSettings || {};
-
-    const params = {
-      contact_number: contactNumber,
-      name: name,
-    };
-    const { data, ...rest } = await callApi("/api/user/login", params, {
-      Authorization: `Basic ${apiKey}`,
-    });
-    if (data) {
-      if (data.access_token) {
-        setupAxiosDefaults(data.access_token);
-      }
-      window.sessionStorage.setItem("WhatsUpName", data.name);
-      window.sessionStorage.setItem(
-        "WhatsUpContactNumber",
-        data.contact_number
-      );
-      window.sessionStorage.setItem("WhatsUpAccessToken", data.access_token);
-      window.sessionStorage.setItem("WhatsUpRefreshToken", data.refresh_token);
-      window.sessionStorage.setItem(
-        "WhatsAppLoginStatus",
-        data.whatsapp_login_status
-      );
-    } else {
-      // TODO: handle erros
-    }
-  },
-  logout: () => {
-    logout();
-  },
-  logoutFromWhatsApp: () => {
-    logoutFromWhatsApp();
-  },
-  showQrCode: () => {
-    displayQrCode();
-  },
-  getChatsList: () => {
-    // Working
-    return getChatsList();
-  },
-  sendTextMessage: (rjid, message) => {
-    // Working
-    return sendTextMessage(rjid, message);
-  },
-  sendImageMessage: (rjid, image, caption) => {
-    // Working
-    return sendImageMessage(rjid, image, caption);
-  },
-  sendAttachmentMessage: (rjid, attachment) => {
-    // Working
-    return sendAttachmentMessage(rjid, attachment);
-  },
-};
 
 async function getQRCode() {
   const url = "/api/messages/get_qrcode";
-  return whatupAxios({
+  return whatsupAxios({
     method: "post",
     url,
     responseType: "blob",
@@ -105,11 +36,29 @@ const displayQrCode = async function () {
   const { response, error } = await getQRCode();
   if (!error && response && response.data) {
     let qrCodeDiv = document.getElementById("qrcode");
+    if (!qrCodeDiv) {
+      console.warn("[WhatsUp] where the f**k do i show QR Code");
+      return;
+    }
     qrCodeDiv.innerHTML += `<img alt="qrcode" src=${URL.createObjectURL(
       response.data
     )} />`;
   } else {
     console.error("could not get qr-code", error);
+  }
+};
+
+const callApi = async function (url, data, headers) {
+  try {
+    const response = await whatsupAxios({
+      method: "post",
+      url,
+      data,
+      headers,
+    });
+    return response;
+  } catch (error) {
+    return { error };
   }
 };
 
@@ -125,7 +74,9 @@ async function logoutFromWhatsApp() {
 
 async function getChatsList() {
   const url = "/api/messages/get_chats_list";
-  return callApi(url);
+  const { data, error } = await callApi(url);
+  if (error) throw error;
+  return data;
 }
 
 async function sendTextMessage(rjid, message) {
@@ -150,19 +101,72 @@ async function sendAttachmentMessage(rjid, attachment) {
   return callApi(url, formData, { "Content-Type": "multipart/form-data" });
 }
 
-const callApi = async function (url, data, headers) {
-  try {
-    const response = await whatupAxios({
-      method: "post",
-      url,
-      data,
-      headers,
-    });
-    return response;
-  } catch (error) {
-    return { error };
-  }
-};
+const whatsupWidget = (function () {
+  var privateInstantiated = false;
+  const wrappedFunction = function (func) {
+    return function () {
+      if (!func) return;
+      if (!privateInstantiated) {
+        console.warn(`[WhatsUp] not loaded yet, cant call ${func.name}`);
+        return () => {};
+      }
+      return func.apply(this, arguments);
+    };
+  };
+  const Login = async function (whatsupConversationsSettings) {
+    const { accessToken, contactNumber, name } =
+      whatsupConversationsSettings || {};
+
+    if (!accessToken) {
+      throw "[WhatsUp] accessToken is required";
+    }
+    setupAxiosDefaults(accessToken);
+    const params = {
+      contact_number: contactNumber,
+      name: name,
+    };
+    const { data, ...rest } = await callApi("/api/user/get_user_info", params);
+    if (data) {
+      sessionStorage.setItem("WhatsUpName", data.name);
+      sessionStorage.setItem("WhatsUpContactNumber", data.contact_number);
+      sessionStorage.setItem("WhatsAppLoginStatus", data.whatsapp_login_status);
+    } else {
+      throw rest;
+    }
+    privateInstantiated = true;
+  };
+  return {
+    load: Login,
+    login: Login,
+    isWidgetLoaded: () => {
+      return privateInstantiated;
+    },
+    isWhatsAppConnected: wrappedFunction(() => {
+      return sessionStorage.getItem("WhatsAppLoginStatus") === "connected";
+    }),
+    logout: wrappedFunction(() => {
+      logout();
+    }),
+    logoutFromWhatsApp: wrappedFunction(() => {
+      logoutFromWhatsApp();
+    }),
+    showQrCode: wrappedFunction(() => {
+      displayQrCode();
+    }),
+    getChatsList: wrappedFunction(() => {
+      return getChatsList();
+    }),
+    sendTextMessage: wrappedFunction((rjid, message) => {
+      return sendTextMessage(rjid, message);
+    }),
+    sendImageMessage: wrappedFunction((rjid, image, caption) => {
+      return sendImageMessage(rjid, image, caption);
+    }),
+    sendAttachmentMessage: wrappedFunction((rjid, attachment) => {
+      return sendAttachmentMessage(rjid, attachment);
+    }),
+  };
+})();
 
 // let socket = new WebSocket("ws://localhost:9005/ws");
 
@@ -191,3 +195,6 @@ const callApi = async function (url, data, headers) {
 // socket.onerror = function (error) {
 //   console.log(`[error] ${error.message}`);
 // };
+
+Object.freeze(whatsupWidget);
+export { whatsupWidget };
