@@ -1,4 +1,5 @@
-import axios from "axios";
+// import axios from "axios";
+const axios = require("axios");
 
 const whatsupAxios = axios.create({
   baseURL: __whatsup.env.BASE_URL,
@@ -8,7 +9,19 @@ const whatsupAxios = axios.create({
   },
 });
 
-const sessionStorage = window.sessionStorage;
+// Need to mock session storage for NODE
+let sessionStorage;
+const _sessionStorage = {};
+if (typeof window !== "undefined") {
+  sessionStorage = window.sessionStorage;
+} else {
+  sessionStorage = {
+    setItem: (key, value) => (_sessionStorage[key] = value),
+    getItem: (key) => _sessionStorage[key],
+    removeItem: (key) => delete _sessionStorage[key],
+  };
+}
+
 const setupAxiosDefaults = (token) => {
   whatsupAxios.interceptors.request.use(function (config) {
     if (token) {
@@ -80,8 +93,19 @@ async function getChatsList() {
 }
 
 async function sendTextMessage(rjid, message) {
+  if (!rjid) {
+    console.error("[WhatsUp][sendTextMessage] rJid is required");
+    return;
+  }
+  if (!message) {
+    console.error("[WhatsUp][sendTextMessage] message is required");
+    return;
+  }
+  console.log("ARGS:sendTextMessage ", rjid, message);
   const url = "/api/messages/send_text_message";
-  return callApi(url, { rjid: rjid, message: message });
+  const { data, error } = await callApi(url, { rjid: rjid, message: message });
+  if (error) throw error;
+  return data;
 }
 
 async function sendImageMessage(rjid, image, message = "") {
@@ -90,7 +114,11 @@ async function sendImageMessage(rjid, image, message = "") {
   formData.append("rjid", rjid);
   formData.append("document", image);
   formData.append("message", message);
-  return callApi(url, formData, { "Content-Type": "multipart/form-data" });
+  const { data, error } = callApi(url, formData, {
+    "Content-Type": "multipart/form-data",
+  });
+  if (error) throw error;
+  return data;
 }
 
 async function sendAttachmentMessage(rjid, attachment) {
@@ -98,7 +126,11 @@ async function sendAttachmentMessage(rjid, attachment) {
   var formData = new FormData();
   formData.append("rjid", rjid);
   formData.append("document", attachment);
-  return callApi(url, formData, { "Content-Type": "multipart/form-data" });
+  const { data, error } = callApi(url, formData, {
+    "Content-Type": "multipart/form-data",
+  });
+  if (error) throw error;
+  return data;
 }
 
 const whatsupWidget = (function () {
@@ -108,8 +140,9 @@ const whatsupWidget = (function () {
       if (!func) return;
       if (!privateInstantiated) {
         console.warn(`[WhatsUp] not loaded yet, cant call ${func.name}`);
-        return () => {};
+        return;
       }
+      console.log("ARGS: ", arguments);
       return func.apply(this, arguments);
     };
   };
